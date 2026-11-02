@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IrisVision — Human Iris Localization &amp; Validation</title>
+  <meta name="description" content="Real-time, in-browser human iris localization and validation using MediaPipe Face Landmarker, least-squares circle fitting and OpenCV.js Hough verification." />
+  <meta name="theme-color" content="#07090f" />
+  <meta property="og:title" content="IrisVision — Human Iris Localization & Validation" />
+  <meta property="og:description" content="Localize and validate the human iris in real time, entirely in your browser." />
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a class="brand" href="#top">
+      <img src="assets/favicon.svg" alt="" width="28" height="28" />
+      <span>Iris<b>Vision</b></span>
+    </a>
+    <nav class="nav-links">
+      <a href="#demo">Live demo</a>
+      <a href="#pipeline">Pipeline</a>
+      <a href="#validation">Validation</a>
+      <a href="https://github.com/Subzero-005/iris-vision" target="_blank" rel="noopener" class="nav-gh">GitHub ↗</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <!-- ───────────── HERO ───────────── -->
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="dot"></span> Computer Vision · Biometrics · Runs 100% in-browser</p>
+        <h1>Find the iris.<br /><span class="grad">Then prove it.</span></h1>
+        <p class="lede">
+          IrisVision localizes the human iris in real time from a webcam or photo, fits a sub-pixel circle to it,
+          and then <em>independently validates</em> that fit with classical computer vision — Hough-gradient circle
+          detection and radial intensity contrast — before reporting a verdict.
+        </p>
+        <div class="cta">
+          <a class="btn btn-primary" href="#demo">Launch live demo</a>
+          <a class="btn btn-ghost" href="#pipeline">How it works</a>
+        </div>
+        <ul class="hero-stats">
+          <li><b>478</b><span>3D face landmarks</span></li>
+          <li><b>~30</b><span>frames / second</span></li>
+          <li><b>2</b><span>independent validators</span></li>
+          <li><b>0</b><span>bytes uploaded</span></li>
+        </ul>
+      </div>
+
+      <div class="hero-visual" aria-hidden="true">
+        <svg viewBox="0 0 400 400" class="iris-svg">
+          <defs>
+            <radialGradient id="irisFill" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#0b1220" />
+              <stop offset="34%" stop-color="#123b4a" />
+              <stop offset="62%" stop-color="#1c7f86" />
+              <stop offset="86%" stop-color="#2fd0c0" />
+              <stop offset="100%" stop-color="#0c2a33" />
+            </radialGradient>
+            <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#3fe0d0" stop-opacity=".35" />
+              <stop offset="100%" stop-color="#3fe0d0" stop-opacity="0" />
+            </radialGradient>
+          </defs>
+          <circle cx="200" cy="200" r="190" fill="url(#glow)" />
+          <g class="spin-slow">
+            <circle cx="200" cy="200" r="168" fill="none" stroke="#8b7bff" stroke-opacity=".45" stroke-width="1" stroke-dasharray="2 10" />
+            <circle cx="200" cy="200" r="150" fill="none" stroke="#3fe0d0" stroke-opacity=".25" stroke-width="1" />
+          </g>
+          <circle cx="200" cy="200" r="110" fill="url(#irisFill)" />
+          <g class="spin-rev">
+            <circle cx="200" cy="200" r="80" fill="none" stroke="#7ff3e6" stroke-opacity=".35" stroke-width="56" stroke-dasharray="1.2 4.2" />
+          </g>
+          <circle cx="200" cy="200" r="40" fill="#03050a" />
+          <circle cx="183" cy="184" r="10" fill="#fff" fill-opacity=".85" />
+          <circle cx="216" cy="214" r="4" fill="#fff" fill-opacity=".5" />
+          <!-- fitted circle + reticle -->
+          <circle cx="200" cy="200" r="112" fill="none" stroke="#3fe0d0" stroke-width="2.5" class="pulse" />
+          <circle cx="200" cy="200" r="108" fill="none" stroke="#ff5fa2" stroke-width="1.5" stroke-dasharray="6 6" class="spin-slow" />
+          <g stroke="#e6edf7" stroke-opacity=".7" stroke-width="1.5">
+            <line x1="200" y1="70" x2="200" y2="96" /><line x1="200" y1="304" x2="200" y2="330" />
+            <line x1="70" y1="200" x2="96" y2="200" /><line x1="304" y1="200" x2="330" y2="200" />
+          </g>
+          <g fill="none" stroke="#3fe0d0" stroke-width="2">
+            <path d="M40 80 V40 H80" /><path d="M320 40 H360 V80" />
+            <path d="M360 320 V360 H320" /><path d="M80 360 H40 V320" />
+          </g>
+          <rect x="40" y="0" width="320" height="2" fill="#3fe0d0" fill-opacity=".6" class="scanline" />
+        </svg>
+        <div class="tag tag-a"><span>r</span> 56.4 px · RMS 0.31</div>
+        <div class="tag tag-b"><span class="ok">PASS</span> score 0.91</div>
+        <div class="tag tag-c"><span>Δ</span> Hough 0.08 r</div>
+      </div>
+    </section>
+
+    <!-- ───────────── DEMO ───────────── -->
+    <section id="demo" class="section">
+      <div class="section-head">
+        <p class="eyebrow">Live demo</p>
+        <h2>Iris localization lab</h2>
+        <p class="muted">Start your camera or drop a face photo. Processing happens on your device — no frame ever leaves the browser.</p>
+      </div>
+
+      <div class="toolbar">
+        <div class="tool-group">
+          <button id="btnCamera" class="btn btn-primary btn-sm" disabled>
+            <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11z"/></svg>
+            <span>Start camera</span>
+          </button>
+          <label class="btn btn-ghost btn-sm" id="btnUploadLabel">
+            <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M5 20h14v-2H5zm7-16-5 5h3v6h4V9h3z"/></svg>
+            <span>Upload image</span>
+            <input id="fileInput" type="file" accept="image/*" hidden />
+          </label>
+          <button id="btnSample" class="btn btn-ghost btn-sm">Try sample photo</button>
+          <button id="btnCapture" class="btn btn-ghost btn-sm" disabled>Capture PNG</button>
+          <button id="btnReport" class="btn btn-ghost btn-sm" disabled>Export report</button>
+        </div>
+        <div class="tool-group toggles" role="group" aria-label="Overlay layers">
+          <label class="pill"><input type="checkbox" data-toggle="mesh" /> <span>Face mesh</span></label>
+          <label class="pill"><input type="checkbox" data-toggle="contours" checked /> <span>Eye contours</span></label>
+          <label class="pill"><input type="checkbox" data-toggle="iris" checked /> <span>Iris fit</span></label>
+          <label class="pill"><input type="checkbox" data-toggle="hough" checked /> <span>Hough check</span></label>
+          <label class="pill"><input type="checkbox" data-toggle="gaze" checked /> <span>Gaze vector</span></label>
+        </div>
+      </div>
+
+      <div class="lab">
+        <div class="lab-main">
+          <div class="stage" id="stage">
+            <canvas id="output"></canvas>
+            <video id="video" playsinline muted hidden></video>
+            <div class="stage-empty" id="stageEmpty">
+              <div class="empty-iris" aria-hidden="true"></div>
+              <h3>Waiting for input</h3>
+              <p>Start the camera, try the sample photo, or drag &amp; drop a face photo here.</p>
+              <p class="tiny muted" id="stageMsg">Loading models…</p>
+            </div>
+            <div class="hud">
+              <span class="chip" id="chipModel"><i></i>Landmarker</span>
+              <span class="chip" id="chipCv"><i></i>OpenCV.js</span>
+              <span class="chip" id="chipFace"><i></i>No face</span>
+            </div>
+            <div class="hud hud-right">
+              <span class="chip mono" id="chipFps">— fps</span>
+            </div>
+            <div class="drop-hint" id="dropHint">Drop image to analyze</div>
+          </div>
+
+          <div class="eye-row">
+            <article class="eye-card" data-eye="right">
+              <header><h4>Right eye <small>(subject)</small></h4><span class="verdict" id="verdict-right">—</span></header>
+              <canvas class="eye-canvas" id="crop-right" width="320" height="180"></canvas>
+              <dl class="eye-stats">
+                <div><dt>Center</dt><dd id="c-right">—</dd></div>
+                <div><dt>Radius</dt><dd id="r-right">—</dd></div>
+                <div><dt>Fit RMS</dt><dd id="rms-right">—</dd></div>
+                <div><dt>Hough Δ</dt><dd id="h-right">—</dd></div>
+                <div><dt>Contrast</dt><dd id="k-right">—</dd></div>
+                <div><dt>Score</dt><dd id="s-right">—</dd></div>
+              </dl>
+              <div class="meter"><span id="m-right"></span></div>
+            </article>
+            <article class="eye-card" data-eye="left">
+              <header><h4>Left eye <small>(subject)</small></h4><span class="verdict" id="verdict-left">—</span></header>
+              <canvas class="eye-canvas" id="crop-left" width="320" height="180"></canvas>
+              <dl class="eye-stats">
+                <div><dt>Center</dt><dd id="c-left">—</dd></div>
+                <div><dt>Radius</dt><dd id="r-left">—</dd></div>
+                <div><dt>Fit RMS</dt><dd id="rms-left">—</dd></div>
+                <div><dt>Hough Δ</dt><dd id="h-left">—</dd></div>
+                <div><dt>Contrast</dt><dd id="k-left">—</dd></div>
+                <div><dt>Score</dt><dd id="s-left">—</dd></div>
+              </dl>
+              <div class="meter"><span id="m-left"></span></div>
+            </article>
+          </div>
+        </div>
+
+        <aside class="lab-side">
+          <div class="metric-grid">
+            <div class="metric"><span class="label">Distance</span><b id="mDistance">—</b><small>from 11.7 mm iris</small></div>
+            <div class="metric"><span class="label">Gaze</span><b id="mGaze">—</b><small id="mGazeSub">horizontal · vertical</small></div>
+            <div class="metric"><span class="label">Blinks</span><b id="mBlinks">0</b><small id="mBlinkRate">— / min</small></div>
+            <div class="metric"><span class="label">Openness</span><b id="mOpen">—</b><small>mean EAR</small></div>
+            <div class="metric"><span class="label">Pass rate</span><b id="mPass">—</b><small>this session</small></div>
+            <div class="metric"><span class="label">Frames</span><b id="mFrames">0</b><small id="mLatency">— ms / frame</small></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h4>Eye Aspect Ratio</h4><span class="legend"><i class="lg-r"></i>R <i class="lg-l"></i>L <i class="lg-t"></i>blink</span></div>
+            <canvas id="chartEar" class="chart" width="560" height="150"></canvas>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h4>Validation score</h4><span class="legend"><i class="lg-r"></i>R <i class="lg-l"></i>L <i class="lg-t"></i>pass</span></div>
+            <canvas id="chartScore" class="chart" width="560" height="150"></canvas>
+          </div>
+
+          <div class="panel panel-gaze">
+            <div class="panel-head"><h4>Gaze map</h4><button class="link" id="btnResetGaze">reset</button></div>
+            <canvas id="gazeMap" width="300" height="300"></canvas>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ───────────── PIPELINE ───────────── -->
+    <section id="pipeline" class="section">
+      <div class="section-head">
+        <p class="eyebrow">Pipeline</p>
+        <h2>From pixels to a validated iris</h2>
+        <p class="muted">Every frame flows through six stages. A learned model proposes; classical vision verifies.</p>
+      </div>
+      <ol class="steps">
+        <li>
+          <span class="step-n">01</span>
+          <h3>Capture</h3>
+          <p>Frames come from <code>getUserMedia</code> or a local image. Nothing is uploaded — all compute runs in WebAssembly and WebGL.</p>
+        </li>
+        <li>
+          <span class="step-n">02</span>
+          <h3>Face landmarks</h3>
+          <p>MediaPipe Face Landmarker regresses <b>478</b> 3D landmarks, including 5 points per iris (center + 4 limbus points).</p>
+        </li>
+        <li>
+          <span class="step-n">03</span>
+          <h3>Circle fit</h3>
+          <p>A centered algebraic least-squares (Kåsa) fit over the limbus points gives a sub-pixel center, radius and RMS residual.</p>
+          <code class="formula">min Σ (x² + y² + Dx + Ey + F)²</code>
+        </li>
+        <li>
+          <span class="step-n">04</span>
+          <h3>Eye state</h3>
+          <p>Eye Aspect Ratio detects blinks with hysteresis; the iris position between canthi and lids yields a gaze estimate.</p>
+          <code class="formula">EAR = (‖p₂−p₆‖ + ‖p₃−p₅‖) / 2‖p₁−p₄‖</code>
+        </li>
+        <li>
+          <span class="step-n">05</span>
+          <h3>Validation</h3>
+          <p>The eye region is cropped and checked by OpenCV Hough-gradient circle detection and a radial intensity contrast test.</p>
+        </li>
+        <li>
+          <span class="step-n">06</span>
+          <h3>Metrics</h3>
+          <p>Using the near-constant human iris diameter (~11.7 mm) and a pinhole model, the system estimates camera distance.</p>
+          <code class="formula">Z = f · 11.7 mm / d<sub>px</sub></code>
+        </li>
+      </ol>
+    </section>
+
+    <!-- ───────────── VALIDATION ───────────── -->
+    <section id="validation" class="section">
+      <div class="section-head">
+        <p class="eyebrow">Validation</p>
+        <h2>Why a second opinion matters</h2>
+        <p class="muted">Landmark models always output an answer — even when the eye is closed, blurred or occluded. IrisVision only trusts a fit that agrees with evidence in the pixels.</p>
+      </div>
+      <div class="val-grid">
+        <div class="val-card">
+          <h3><span class="sw sw-pink"></span>Geometric agreement <small>45%</small></h3>
+          <p>HoughCircles runs on a blurred, histogram-equalized grayscale crop of the eye. The strongest candidates are compared to the landmark fit by center error (in radii) and radius ratio.</p>
+          <code class="formula">g = (1 − Δc/0.6r) · (1 − |1 − r<sub>h</sub>/r|/0.5)</code>
+        </div>
+        <div class="val-card">
+          <h3><span class="sw sw-cyan"></span>Radial contrast <small>35%</small></h3>
+          <p>The iris is darker than the surrounding sclera. Mean intensity inside 0.7r is compared to a 1.25r–1.9r ring, sampled only inside the eyelid polygon.</p>
+          <code class="formula">k = (I<sub>ring</sub> − I<sub>iris</sub>) / I<sub>ring</sub></code>
+        </div>
+        <div class="val-card">
+          <h3><span class="sw sw-violet"></span>Eye openness <small>20%</small></h3>
+          <p>A closed or squinting eye hides the limbus. Low EAR marks the eye as <b>OCCLUDED</b> rather than pretending to localize it.</p>
+          <code class="formula">o = clamp((EAR − 0.15) / 0.12)</code>
+        </div>
+      </div>
+      <div class="verdict-legend">
+        <span class="verdict pass">PASS</span> score ≥ 0.60
+        <span class="verdict fail">FAIL</span> score &lt; 0.60, with the weakest signal as reason
+        <span class="verdict occl">OCCLUDED</span> EAR &lt; 0.17
+      </div>
+    </section>
+
+    <!-- ───────────── STACK ───────────── -->
+    <section class="section stack">
+      <h2>Built with</h2>
+      <ul class="chips">
+        <li>MediaPipe Tasks Vision</li><li>OpenCV.js (WASM)</li><li>WebGL / GPU delegate</li>
+        <li>Canvas 2D</li><li>Vanilla ES Modules</li><li>GitHub Pages</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Designed &amp; built by <a href="https://github.com/Subzero-005" target="_blank" rel="noopener">Adhiraj Madan</a> · IrisVision is a research demo, not a certified biometric system.</p>
+    <p class="tiny">Sample photo: astronaut Kalpana Chawla, NASA (public domain).</p>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

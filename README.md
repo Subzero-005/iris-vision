@@ -11,7 +11,8 @@ Everything runs on the client (WebAssembly + WebGL) — no frame ever leaves the
 - **Iris localization** from MediaPipe Face Landmarker's 478 landmarks (5 per iris)
 - **Sub-pixel circle fit** — centred algebraic (Kåsa) least-squares fit with RMS residual
 - **Independent validation** of every fit:
-  - OpenCV.js `HoughCircles` on a histogram-equalized eye crop (center error and radius ratio)
+  - Daugman's integro-differential operator on the lateral limbus arcs (pure JS)
+  - OpenCV.js `HoughCircles` on an upsampled, median-filtered window around the iris
   - Radial intensity contrast between iris and sclera, sampled inside the eyelid polygon
   - Eye openness (EAR) so closed eyes are reported as `OCCLUDED`, not guessed
 - **Eye-state analytics** — blink detection with hysteresis, blink rate, gaze direction with recentring
@@ -26,7 +27,7 @@ frame ─▶ Face Landmarker ─▶ iris limbus points ─▶ least-squares circ
                                                        │
             ┌──────────────────────────────────────────┤
             ▼                    ▼                     ▼
-     Hough circle check    radial contrast       eye aspect ratio
+  Daugman + Hough check   radial contrast      eye aspect ratio
             └──────────┬─────────┴─────────────────────┘
                        ▼
          score = 0.45·geometry + 0.35·contrast + 0.20·openness
@@ -36,12 +37,12 @@ frame ─▶ Face Landmarker ─▶ iris limbus points ─▶ least-squares circ
 
 | Signal | Definition |
 | --- | --- |
-| Geometry | `(1 − Δc / 0.6r) · (1 − |1 − r_hough / r| / 0.5)` |
+| Geometry | `0.65·g(Daugman) + 0.35·g(Hough)`, with `g = (1 − Δc / 0.6r) · (1 − \|1 − r′ / r\| / 0.5)` |
 | Contrast | `(I_ring − I_iris) / I_ring`, iris ≤ 0.7r, ring 1.25r–1.9r |
 | Openness | `clamp((EAR − 0.15) / 0.12)` |
 | Distance | `Z = f · 11.7 mm / d_px`, `f = (W/2) / tan(HFOV/2)`, HFOV ≈ 60° |
 
-If OpenCV.js fails to load, validation continues on contrast and openness alone.
+If OpenCV.js fails to load, geometry falls back to the Daugman operator alone.
 
 ## Run locally
 

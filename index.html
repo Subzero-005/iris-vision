@@ -38,8 +38,8 @@
         <h1>Find the iris.<br /><span class="grad">Then prove it.</span></h1>
         <p class="lede">
           IrisVision localizes the human iris in real time from a webcam or photo, fits a sub-pixel circle to it,
-          and then <em>independently validates</em> that fit with classical computer vision — Hough-gradient circle
-          detection and radial intensity contrast — before reporting a verdict.
+          and then <em>independently validates</em> that fit with classical computer vision — Daugman's
+          integro-differential operator, Hough circles and radial intensity contrast — before reporting a verdict.
         </p>
         <div class="cta">
           <a class="btn btn-primary" href="#demo">Launch live demo</a>
@@ -48,7 +48,7 @@
         <ul class="hero-stats">
           <li><b>478</b><span>3D face landmarks</span></li>
           <li><b>~30</b><span>frames / second</span></li>
-          <li><b>2</b><span>independent validators</span></li>
+          <li><b>3</b><span>independent validators</span></li>
           <li><b>0</b><span>bytes uploaded</span></li>
         </ul>
       </div>
@@ -95,7 +95,7 @@
         </svg>
         <div class="tag tag-a"><span>r</span> 56.4 px · RMS 0.31</div>
         <div class="tag tag-b"><span class="ok">PASS</span> score 0.91</div>
-        <div class="tag tag-c"><span>Δ</span> Hough 0.08 r</div>
+        <div class="tag tag-c"><span>Δ</span> Daugman 0.08 r</div>
       </div>
     </section>
 
@@ -126,7 +126,7 @@
           <label class="pill"><input type="checkbox" data-toggle="mesh" /> <span>Face mesh</span></label>
           <label class="pill"><input type="checkbox" data-toggle="contours" checked /> <span>Eye contours</span></label>
           <label class="pill"><input type="checkbox" data-toggle="iris" checked /> <span>Iris fit</span></label>
-          <label class="pill"><input type="checkbox" data-toggle="hough" checked /> <span>Hough check</span></label>
+          <label class="pill"><input type="checkbox" data-toggle="validators" checked /> <span>Validator circles</span></label>
           <label class="pill"><input type="checkbox" data-toggle="gaze" checked /> <span>Gaze vector</span></label>
         </div>
       </div>
@@ -161,9 +161,9 @@
                 <div><dt>Center</dt><dd id="c-right">—</dd></div>
                 <div><dt>Radius</dt><dd id="r-right">—</dd></div>
                 <div><dt>Fit RMS</dt><dd id="rms-right">—</dd></div>
-                <div><dt>Hough Δ</dt><dd id="h-right">—</dd></div>
                 <div><dt>Contrast</dt><dd id="k-right">—</dd></div>
-                <div><dt>Score</dt><dd id="s-right">—</dd></div>
+                <div class="wide"><dt>Daugman Δ</dt><dd id="d-right">—</dd></div>
+                <div class="wide"><dt>Hough Δ</dt><dd id="h-right">—</dd></div>
               </dl>
               <div class="meter"><span id="m-right"></span></div>
             </article>
@@ -174,9 +174,9 @@
                 <div><dt>Center</dt><dd id="c-left">—</dd></div>
                 <div><dt>Radius</dt><dd id="r-left">—</dd></div>
                 <div><dt>Fit RMS</dt><dd id="rms-left">—</dd></div>
-                <div><dt>Hough Δ</dt><dd id="h-left">—</dd></div>
                 <div><dt>Contrast</dt><dd id="k-left">—</dd></div>
-                <div><dt>Score</dt><dd id="s-left">—</dd></div>
+                <div class="wide"><dt>Daugman Δ</dt><dd id="d-left">—</dd></div>
+                <div class="wide"><dt>Hough Δ</dt><dd id="h-left">—</dd></div>
               </dl>
               <div class="meter"><span id="m-left"></span></div>
             </article>
@@ -244,7 +244,7 @@
         <li>
           <span class="step-n">05</span>
           <h3>Validation</h3>
-          <p>The eye region is cropped and checked by OpenCV Hough-gradient circle detection and a radial intensity contrast test.</p>
+          <p>The eye region is cropped and re-examined with Daugman's integro-differential operator, OpenCV Hough circles and a radial intensity contrast test.</p>
         </li>
         <li>
           <span class="step-n">06</span>
@@ -265,8 +265,9 @@
       <div class="val-grid">
         <div class="val-card">
           <h3><span class="sw sw-pink"></span>Geometric agreement <small>45%</small></h3>
-          <p>HoughCircles runs on a blurred, histogram-equalized grayscale crop of the eye. The strongest candidates are compared to the landmark fit by center error (in radii) and radius ratio.</p>
-          <code class="formula">g = (1 − Δc/0.6r) · (1 − |1 − r<sub>h</sub>/r|/0.5)</code>
+          <p>Two classical detectors re-locate the limbus from raw pixels: <b>Daugman's integro-differential operator</b> on the lateral arcs the eyelids rarely cover (65%), and <b>OpenCV HoughCircles</b> on an upsampled, median-filtered window (35%). Each is scored on center error and radius ratio.</p>
+          <code class="formula">max<sub>(x,y,r)</sub> | ∂/∂r ∮ I(x,y) ds / 2πr |</code>
+          <code class="formula">g = (1 − Δc/0.6r) · (1 − |1 − r′/r|/0.5)</code>
         </div>
         <div class="val-card">
           <h3><span class="sw sw-cyan"></span>Radial contrast <small>35%</small></h3>
@@ -290,7 +291,7 @@
     <section class="section stack">
       <h2>Built with</h2>
       <ul class="chips">
-        <li>MediaPipe Tasks Vision</li><li>OpenCV.js (WASM)</li><li>WebGL / GPU delegate</li>
+        <li>MediaPipe Tasks Vision</li><li>OpenCV.js (WASM)</li><li>Daugman operator (pure JS)</li><li>WebGL / GPU delegate</li>
         <li>Canvas 2D</li><li>Vanilla ES Modules</li><li>GitHub Pages</li>
       </ul>
     </section>

@@ -49,7 +49,7 @@ const state = {
   landmarker: null, runningMode: "VIDEO", cv: null,
   source: null, stream: null, raf: 0, lastVideoTime: -1,
   image: null, lastResult: null, lastAnalysis: null,
-  toggles: { mesh: false, contours: true, iris: true, hough: true, gaze: true },
+  toggles: { mesh: false, contours: true, iris: true, validators: true, gaze: true },
   fps: 0, lastFrameAt: 0, latency: 0, lastUiAt: 0, errorShown: false,
 };
 let session;
@@ -119,7 +119,7 @@ loadOpenCV()
   })
   .catch((err) => {
     console.warn(err);
-    setChip("chipCv", "err", "OpenCV off · contrast only");
+    setChip("chipCv", "err", "OpenCV off · Daugman only");
   });
 
 async function setRunningMode(mode) {
@@ -306,17 +306,16 @@ function validateEye(side, fit, roi, contour, ear, live) {
   const poly = contour.map((p) => ({ x: (p.x - roi.x) * s, y: (p.y - roi.y) * s }));
 
   const contrast = radialContrast(img, cs, rs, poly);
+  const daugman = daugmanCheck(img, cs, rs);
   const hough = houghCheck(img, cs, rs);
-  const houghFrame = hough && !hough.none
-    ? { x: hough.x / s + roi.x, y: hough.y / s + roi.y, r: hough.r / s, err: hough.err, ratio: hough.ratio }
-    : hough;
+  const toFrame = (m) => (m && !m.none ? { x: m.x / s + roi.x, y: m.y / s + roi.y, r: m.r / s, err: m.err, ratio: m.ratio } : m);
 
   const openness = clamp((ear - 0.15) / 0.12);
   const kScore = contrast == null ? 0 : clamp(contrast / 0.25);
-  let geom = null;
-  if (hough) geom = hough.none ? 0 : clamp(1 - hough.err / 0.6) * clamp(1 - Math.abs(1 - hough.ratio) / 0.5);
+  const gD = agreement(daugman), gH = agreement(hough);
+  const geom = gH == null ? gD : 0.65 * gD + 0.35 * gH;
 
-  let score = geom == null ? 0.65 * kScore + 0.35 * openness : 0.45 * geom + 0.35 * kScore + 0.2 * openness;
+  let score = 0.45 * geom + 0.35 * kScore + 0.2 * openness;
   if (live) {
     session.ema[side] = session.ema[side] == null ? score : ema(session.ema[side], score, 0.3);
     score = session.ema[side];
@@ -327,11 +326,64 @@ function validateEye(side, fit, roi, contour, ear, live) {
   else if (score >= PASS_THRESHOLD) { verdict = "pass"; reason = "fit confirmed"; }
   else {
     verdict = "fail";
-    const parts = [["low contrast", kScore], ["partly closed", openness]];
-    if (geom != null) parts.push([hough.none ? "no circle found" : "Hough mismatch", geom]);
+    const parts = [["low contrast", kScore], ["partly closed", openness], [daugman.none ? "no limbus edge" : "circle mismatch", geom]];
     reason = parts.sort((a, b) => a[1] - b[1])[0][0];
   }
-  return { contrast, hough: houghFrame, geom, kScore, openness, score, verdict, reason };
+  return { contrast, daugman: toFrame(daugman), hough: toFrame(hough), geom, kScore, openness, score, verdict, reason };
+}
+
+// 1 when a detector agrees with the landmark fit, 0 when it disagrees or finds nothing; null if unavailable.
+function agreement(m) {
+  if (!m) return null;
+  if (m.none) return 0;
+  return clamp(1 - m.err / 0.6) * clamp(1 - Math.abs(1 - m.ratio) / 0.5);
+}
+
+// Daugman's integro-differential operator, restricted to the lateral limbus arcs that eyelids rarely cover:
+// max over (x, y, r) of the radial derivative of the mean intensity along the circle.
+const DAUGMAN_ANGLES = [];
+for (let i = 0; i < 12; i++) {
+  const t = (-25 + i * 6) * Math.PI / 180;
+  DAUGMAN_ANGLES.push(t, Math.PI - t);
+}
+const DAUGMAN_COS = DAUGMAN_ANGLES.map(Math.cos), DAUGMAN_SIN = DAUGMAN_ANGLES.map(Math.sin);
+
+function daugmanCheck(img, c, r) {
+  const { data, width, height } = img;
+  const gray = new Float32Array(width * height);
+  for (let i = 0, j = 0; i < gray.length; i++, j += 4) gray[i] = 0.299 * data[j] + 0.587 * data[j + 1] + 0.114 * data[j + 2];
+  // Clip specular highlights (catchlights) so they don't masquerade as a dark-to-bright edge.
+  const cap = percentile(gray, 0.9);
+  for (let i = 0; i < gray.length; i++) if (gray[i] > cap) gray[i] = cap;
+  const sample = (x, y) => {
+    x = clamp(x, 0, width - 1.001); y = clamp(y, 0, height - 1.001);
+    const x0 = x | 0, y0 = y | 0, fx = x - x0, fy = y - y0, i = y0 * width + x0;
+    return (gray[i] * (1 - fx) + gray[i + 1] * fx) * (1 - fy) + (gray[i + width] * (1 - fx) + gray[i + width + 1] * fx) * fy;
+  };
+
+  const radii = [];
+  for (let k = 0.65; k <= 1.4501; k += 0.05) radii.push(k * r);
+  const n = DAUGMAN_ANGLES.length, span = 0.8 * r, step = r / 6;
+  const I = new Float32Array(radii.length);
+  let best = null;
+  for (let dy = -span; dy <= span + 1e-6; dy += step) {
+    for (let dx = -span; dx <= span + 1e-6; dx += step) {
+      const cx = c.x + dx, cy = c.y + dy;
+      for (let ri = 0; ri < radii.length; ri++) {
+        let sum = 0;
+        for (let a = 0; a < n; a++) sum += sample(cx + radii[ri] * DAUGMAN_COS[a], cy + radii[ri] * DAUGMAN_SIN[a]);
+        I[ri] = sum / n;
+      }
+      // Smoothed derivative: the iris is darker than the sclera, so the limbus is a positive step outward.
+      // Candidates span 0.75r–1.35r: the limbus, not the pupil boundary inside it.
+      for (let ri = 2; ri < radii.length - 2; ri++) {
+        const d = (I[ri + 1] + I[ri + 2] - I[ri - 1] - I[ri - 2]) / 2;
+        if (!best || d > best.d) best = { x: cx, y: cy, r: radii[ri], d };
+      }
+    }
+  }
+  if (!best || best.d < 3) return { none: true };
+  return { ...best, err: Math.hypot(best.x - c.x, best.y - c.y) / r, ratio: best.r / r };
 }
 
 function radialContrast(img, c, r, poly) {
@@ -358,30 +410,38 @@ function radialContrast(img, c, r, poly) {
 function houghCheck(img, c, r) {
   const cv = state.cv;
   if (!cv) return null;
-  let src, gray, circles;
+  // Search a window of ±2.2r around the proposal, upsampled so the iris radius is ~24 px.
+  const half = r * 2.2;
+  const x0 = Math.max(0, Math.floor(c.x - half)), y0 = Math.max(0, Math.floor(c.y - half));
+  const x1 = Math.min(img.width, Math.ceil(c.x + half)), y1 = Math.min(img.height, Math.ceil(c.y + half));
+  if (x1 - x0 < 8 || y1 - y0 < 8) return { none: true };
+  const k = 24 / r;
+  let src, win, gray, circles;
   try {
     src = cv.matFromImageData(img);
+    win = src.roi(new cv.Rect(x0, y0, x1 - x0, y1 - y0));
     gray = new cv.Mat();
     circles = new cv.Mat();
-    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+    cv.cvtColor(win, gray, cv.COLOR_RGBA2GRAY);
+    cv.resize(gray, gray, new cv.Size(Math.round((x1 - x0) * k), Math.round((y1 - y0) * k)), 0, 0, cv.INTER_CUBIC);
     cv.equalizeHist(gray, gray);
-    cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 1.5);
-    cv.HoughCircles(gray, circles, cv.HOUGH_GRADIENT, 1, Math.max(4, r * 1.5), 90, 12,
-      Math.max(3, Math.round(r * 0.6)), Math.max(6, Math.round(r * 1.5)));
+    cv.medianBlur(gray, gray, 5);
+    cv.HoughCircles(gray, circles, cv.HOUGH_GRADIENT, 1, 10, 60, 13, 16, 32);
     // Candidates are ordered by accumulator votes; only the strongest few are considered.
     const d = circles.data32F;
     let best = null;
-    for (let i = 0; i < Math.min(circles.cols, 3); i++) {
-      const cand = { x: d[i * 3], y: d[i * 3 + 1], r: d[i * 3 + 2] };
-      const err = Math.hypot(cand.x - c.x, cand.y - c.y) / r;
-      if (!best || err < best.err) best = { ...cand, err, ratio: cand.r / r };
+    for (let i = 0; i < Math.min(circles.cols, 5); i++) {
+      const cand = { x: d[i * 3] / k + x0, y: d[i * 3 + 1] / k + y0, r: d[i * 3 + 2] / k };
+      const err = Math.hypot(cand.x - c.x, cand.y - c.y) / r, ratio = cand.r / r;
+      const cost = err + Math.abs(1 - ratio);
+      if (!best || cost < best.cost) best = { ...cand, err, ratio, cost };
     }
     return best ?? { none: true };
   } catch (err) {
     console.warn("Hough check failed", err);
     return null;
   } finally {
-    src?.delete(); gray?.delete(); circles?.delete();
+    src?.delete(); win?.delete(); gray?.delete(); circles?.delete();
   }
 }
 
@@ -439,11 +499,14 @@ function drawOverlay(pts, eyes, w) {
       ctx.lineWidth = lw;
       polyline(ctx, def.contour.map((i) => pts[i]), true);
     }
-    if (T.hough && e.hough && !e.hough.none) {
-      ctx.setLineDash([lw * 3, lw * 3]);
-      ctx.strokeStyle = COLORS.pink;
-      ctx.lineWidth = lw;
-      circle(ctx, e.hough.x, e.hough.y, e.hough.r);
+    if (T.validators) {
+      for (const [m, color, dash] of [[e.daugman, COLORS.violet, [lw, lw * 2]], [e.hough, COLORS.pink, [lw * 3, lw * 3]]]) {
+        if (!m || m.none) continue;
+        ctx.setLineDash(dash);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lw;
+        circle(ctx, m.x, m.y, m.r);
+      }
       ctx.setLineDash([]);
     }
     if (T.iris) {
@@ -476,14 +539,15 @@ function drawCropOverlay(side, e, pts) {
   c.strokeStyle = "rgba(230,237,247,.55)";
   polyline(c, EYES[side].contour.map((i) => map(pts[i])), true);
 
-  if (e.hough && !e.hough.none) {
-    const hp = map(e.hough);
-    c.setLineDash([5, 4]);
-    c.strokeStyle = COLORS.pink;
+  for (const [m, color, dash] of [[e.daugman, COLORS.violet, [2, 4]], [e.hough, COLORS.pink, [5, 4]]]) {
+    if (!m || m.none) continue;
+    const mp = map(m);
+    c.setLineDash(dash);
+    c.strokeStyle = color;
     c.lineWidth = 2;
-    circle(c, hp.x, hp.y, e.hough.r * sx);
-    c.setLineDash([]);
+    circle(c, mp.x, mp.y, m.r * sx);
   }
+  c.setLineDash([]);
   const col = verdictColor(e.verdict);
   c.strokeStyle = col;
   c.lineWidth = 2.5;
@@ -586,7 +650,7 @@ function updateUi(a, live, noFace) {
   if (noFace || !a) {
     for (const side of ["right", "left"]) {
       setVerdict(side, null);
-      for (const k of ["c", "r", "rms", "h", "k", "s"]) $(`${k}-${side}`).textContent = "—";
+      for (const k of ["c", "r", "rms", "d", "h", "k"]) $(`${k}-${side}`).textContent = "—";
       $(`m-${side}`).style.width = "0";
     }
     if (!live) {
@@ -599,12 +663,12 @@ function updateUi(a, live, noFace) {
   for (const side of ["right", "left"]) {
     const e = a.eyes[side];
     setVerdict(side, e);
-    $(`c-${side}`).textContent = `${e.fit.x.toFixed(1)}, ${e.fit.y.toFixed(1)}`;
+    $(`c-${side}`).textContent = `${e.fit.x.toFixed(0)}, ${e.fit.y.toFixed(0)}`;
     $(`r-${side}`).textContent = `${e.fit.r.toFixed(2)} px`;
     $(`rms-${side}`).textContent = Number.isFinite(e.fit.rms) ? `${e.fit.rms.toFixed(2)} px` : "—";
-    $(`h-${side}`).textContent = e.hough == null ? "n/a" : e.hough.none ? "none" : `${e.hough.err.toFixed(2)} r`;
+    $(`d-${side}`).textContent = fmtDelta(e.daugman);
+    $(`h-${side}`).textContent = fmtDelta(e.hough);
     $(`k-${side}`).textContent = e.contrast == null ? "—" : `${(e.contrast * 100).toFixed(0)}%`;
-    $(`s-${side}`).textContent = e.score.toFixed(2);
     const m = $(`m-${side}`);
     m.style.width = `${(e.score * 100).toFixed(0)}%`;
     m.style.background = verdictColor(e.verdict);
@@ -627,7 +691,7 @@ function updateUi(a, live, noFace) {
 function setVerdict(side, e) {
   const el = $(`verdict-${side}`);
   el.className = "verdict" + (e ? ` ${e.verdict}` : "");
-  el.textContent = e ? `${{ pass: "PASS", fail: "FAIL", occl: "OCCLUDED" }[e.verdict]}` : "—";
+  el.textContent = e ? `${{ pass: "PASS", fail: "FAIL", occl: "OCCLUDED" }[e.verdict]} · ${e.score.toFixed(2)}` : "—";
   el.title = e ? e.reason : "";
 }
 
@@ -671,6 +735,12 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+function reportDetector(m) {
+  if (m == null) return "unavailable";
+  if (m.none) return "no circle";
+  return { center_error_r: round(m.err, 3), radius_ratio: round(m.ratio, 3) };
+}
+
 function buildReport() {
   const a = state.lastAnalysis;
   const eye = (e) => e && {
@@ -678,8 +748,7 @@ function buildReport() {
     center_px: { x: round(e.fit.x, 2), y: round(e.fit.y, 2) }, radius_px: round(e.fit.r, 3),
     fit_rms_px: Number.isFinite(e.fit.rms) ? round(e.fit.rms, 3) : null,
     ear: round(e.ear, 4), contrast: e.contrast == null ? null : round(e.contrast, 4),
-    hough: e.hough == null ? "unavailable" : e.hough.none ? "no circle" :
-      { center_error_r: round(e.hough.err, 3), radius_ratio: round(e.hough.ratio, 3) },
+    daugman: reportDetector(e.daugman), hough: reportDetector(e.hough),
   };
   return {
     generated_at: new Date().toISOString(),
@@ -762,11 +831,16 @@ function pointInPolygon(x, y, poly) {
   return inside;
 }
 
+function percentile(arr, q) {
+  const sorted = Float32Array.from(arr).sort();
+  return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+}
 function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 function clamp(v, lo = 0, hi = 1) { return Math.min(hi, Math.max(lo, v)); }
 function ema(prev, next, k) { return prev ? prev + (next - prev) * k : next; }
 function round(v, d) { const k = 10 ** d; return Math.round(v * k) / k; }
 function push(arr, v, max = HISTORY) { arr.push(v); if (arr.length > max) arr.shift(); }
+function fmtDelta(m) { return m == null ? "n/a" : m.none ? "none" : `${m.err.toFixed(2)}r · ${m.ratio.toFixed(2)}×`; }
 function fmtSigned(v) { return (v >= 0 ? "+" : "") + v.toFixed(2); }
 function verdictColor(v) { return v === "pass" ? COLORS.green : v === "occl" ? COLORS.amber : v === "fail" ? COLORS.red : COLORS.cyan; }
 

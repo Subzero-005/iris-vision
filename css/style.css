@@ -61,7 +61,7 @@ img, svg, canvas { display: block; }
 
 /* ───── hero ───── */
 .hero {
-  display: grid; grid-template-columns: 1.1fr 1fr; gap: 40px; align-items: center;
+  display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 40px; align-items: center;
   max-width: 1240px; margin: 0 auto;
   padding: clamp(48px, 9vw, 110px) clamp(16px, 4vw, 48px) 60px;
 }
@@ -178,7 +178,7 @@ h1 { font-size: clamp(40px, 6.4vw, 78px); line-height: 1.02; letter-spacing: -0.
 }
 .stage.dragging .drop-hint { display: grid; }
 
-.eye-row { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.eye-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .eye-card, .panel, .metric, .val-card, .steps li {
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
   backdrop-filter: blur(10px);
@@ -188,8 +188,9 @@ h1 { font-size: clamp(40px, 6.4vw, 78px); line-height: 1.02; letter-spacing: -0.
 .eye-card h4, .panel h4 { margin: 0; font-size: 14px; font-weight: 600; }
 .eye-card h4 small { color: var(--muted); font-weight: 400; }
 .eye-canvas { width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 10px; background: #04060a; }
-.eye-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 10px; margin: 12px 0 10px; }
+.eye-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 10px; margin: 12px 0 10px; }
 .eye-stats div { min-width: 0; }
+.eye-stats .wide { grid-column: span 2; }
 .eye-stats dt { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .eye-stats dd { margin: 0; font-family: var(--mono); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meter { height: 6px; border-radius: 6px; background: var(--line); overflow: hidden; }
@@ -204,7 +205,7 @@ h1 { font-size: clamp(40px, 6.4vw, 78px); line-height: 1.02; letter-spacing: -0.
 .verdict.fail { color: var(--red); border-color: rgba(255,91,107,.5); background: rgba(255,91,107,.1); }
 .verdict.occl { color: var(--amber); border-color: rgba(255,181,71,.5); background: rgba(255,181,71,.1); }
 
-.metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .metric { padding: 12px 14px; min-width: 0; }
 .metric .label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .metric b { display: block; font-family: var(--mono); font-size: 20px; font-weight: 600; margin: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -226,7 +227,7 @@ h1 { font-size: clamp(40px, 6.4vw, 78px); line-height: 1.02; letter-spacing: -0.
 .steps h3 { margin: 6px 0 8px; font-size: 19px; }
 .steps p { color: var(--muted); margin: 0 0 12px; font-size: 14.5px; }
 .formula {
-  display: inline-block; font-size: 12.5px; color: var(--text);
+  display: inline-block; max-width: 100%; overflow-x: auto; vertical-align: top; font-size: 12.5px; color: var(--text);
   background: rgba(255,255,255,.03); border: 1px solid var(--line-2); border-radius: 8px; padding: 6px 10px;
 }
 code:not(.formula) { color: var(--cyan); font-size: .92em; }
@@ -238,7 +239,7 @@ code:not(.formula) { color: var(--cyan); font-size: .92em; }
 .val-card h3 small { margin-left: auto; font: 500 12px var(--mono); color: var(--muted); }
 .val-card p { color: var(--muted); font-size: 14.5px; margin: 0 0 14px; }
 .sw { width: 12px; height: 12px; border-radius: 4px; }
-.sw-pink { background: var(--pink); } .sw-cyan { background: var(--cyan); } .sw-violet { background: var(--violet); }
+.sw-pink { background: var(--pink); } .sw-amber { background: var(--amber); } .sw-cyan { background: var(--cyan); } .sw-violet { background: var(--violet); }
 .verdict-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin-top: 22px; color: var(--muted); font-size: 14px; }
 .verdict-legend .verdict + .verdict, .verdict-legend .verdict { margin-left: 8px; }
 
@@ -267,21 +268,23 @@ code:not(.formula) { color: var(--cyan); font-size: .92em; }
 
 /* ───── responsive ───── */
 @media (max-width: 1080px) {
-  .lab { grid-template-columns: 1fr; }
-  .lab-side { display: grid; grid-template-columns: 1fr 1fr; }
-  .lab-side .metric-grid { grid-column: 1 / -1; grid-template-columns: repeat(6, 1fr); }
+  .lab { grid-template-columns: minmax(0, 1fr); }
+  .lab-side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lab-side .metric-grid { grid-column: 1 / -1; grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .panel-gaze { grid-column: 1 / -1; }
 }
 @media (max-width: 860px) {
-  .hero { grid-template-columns: 1fr; }
+  .hero { grid-template-columns: minmax(0, 1fr); }
   .hero-visual { max-width: 360px; order: -1; }
   .steps, .val-grid { grid-template-columns: 1fr 1fr; }
-  .lab-side .metric-grid { grid-template-columns: repeat(3, 1fr); }
+  .lab-side .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 620px) {
   .nav-links a:not(.nav-gh) { display: none; }
-  .hero-stats { grid-template-columns: repeat(2, 1fr); }
-  .steps, .val-grid, .eye-row, .lab-side { grid-template-columns: 1fr; }
+  .hero-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .steps, .val-grid, .eye-row, .lab-side { grid-template-columns: minmax(0, 1fr); }
+  .lab-side .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .eye-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stage { aspect-ratio: 4 / 3; }
   .tag-a { left: 0; } .tag-b { right: 0; }
   .toolbar .tool-group { width: 100%; }
